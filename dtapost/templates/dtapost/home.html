@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home</title>
+</head>
+<body>
+    <h1>State List</h1>
+    <ul>
+        {% for state in states %}
+            <li>{{ state.state_name }}</li>
+        {% endfor %}
+    </ul>
+
+    <h1>District List</h1>
+    <ul>
+        {% for district in districts %}
+            <li>{{ district.dist_name }}</li>
+        {% endfor %}
+    </ul>
+
+    <h1>Employee List</h1>
+    <ul>
+        {% for employee in employees %}
+            <li>{{ employee.name }} - {{ employee.join_office }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

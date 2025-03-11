@@ -1,0 +1,36 @@
+# Local development settings
+*.env
+
+# Database
+db.sqlite3
+*.sqlite3
+*.db
+
+# Static files (usually collected with `python manage.py collectstatic`)
+staticfiles/
+.vscode/
+# Media files (usually uploaded by users)
+
+# Virtual environment
+ilvenv/
+
+
+__pycache__
+#pyc files
+*.cpython
+*.pyc
+*.cpy
+*Zone.Identifier
+
+
+#Document files
+
+LC_MESSAGES/
+*.po
+*.mo
+django.po
+django.mo
+
+
+PDF_to_JSON.json
+uploaded_json.json
