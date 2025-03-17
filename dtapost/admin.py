@@ -4,6 +4,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from django import forms
+from import_export import widgets
 
 class SafeForeignKeyWidget(ForeignKeyWidget):
     def clean(self, value, row=None, *args, **kwargs):
@@ -164,7 +165,7 @@ class OfficeResource(resources.ModelResource):
 
     class Meta:
         model = Office
-        fields = ('id', 'office_number', 'office', 'department', 'state', 'district', 'tehsil', 'place')
+        fields = ('id', 'office_number', 'office', 'department', 'state', 'district', 'division', 'tehsil', 'place')
         import_id_fields = ('office_number',)
         export_order = ('id', 'office_number', 'office', 'department', 'state', 'district', 'division', 'state', 'tehsil', 'place')
 
@@ -191,157 +192,128 @@ class OfficeResource(resources.ModelResource):
 #     in_office = fields.Field(
 #         column_name='in_office',
 #         attribute='in_office',
-#         widget=ForeignKeyWidget(Office, field='office__office_name')  # Match office by name
+#         widget=ForeignKeyWidget(Office, field='office_number')
 #     )
+
 #     post_name = fields.Field(
 #         column_name='post_name',
-#         attribute='post_name'
+#         attribute='post_name',
+#         widget=forms.widgets.Select(choices=Post.POST_CHOICES)  # Force validation
 #     )
-#     post_number = fields.Field(
-#         column_name='post_number',
-#         attribute='post_number'
+
+#     post_type = fields.Field(
+#         column_name='post_type',
+#         attribute='post_type',
+#         widget=forms.widgets.Select(choices=Post.POST_TYPE_CHOICES)
 #     )
 
 #     class Meta:
 #         model = Post
-#         skip_unchanged = True
-#         report_skipped = True
-#         exclude = ('id',)  # Remove ID from imports
-#         import_id_fields = ()  # No identifier fields needed
 #         fields = ('post_name', 'post_type', 'post_number', 'in_office')
+#         import_id_fields = ()
 
 #     def before_import_row(self, row, **kwargs):
-#         # Convert office name to ID
-#         office_name = row.get('in_office')
-#         if office_name:
-#             office = Office.objects.filter(office__office_name=office_name).first()
-#             if office:
-#                 row['in_office'] = office.id
+#         # Normalize post_name
+#         row['post_name'] = row['post_name'].strip().lower()
+        
+#         # Normalize post_type
+#         row['post_type'] = row['post_type'].strip().lower()
 
+#         # Handle office_number
+#         office_number = row.get('in_office')
+#         if office_number:
+#             try:
+#                 office = Office.objects.get(office_number=int(office_number))
+#                 row['in_office'] = office.id
+#             except Office.DoesNotExist:
+#                 raise ValueError(f"Office {office_number} not found")
+#             except ValueError:
+#                 raise ValueError(f"Invalid office number: {office_number}")
+
+
+# Add the custom OfficeForeignKeyWidget
+class OfficeForeignKeyWidget(ForeignKeyWidget):
+    def clean(self, value, row=None, *args, **kwargs):
+        print(f"Processing in_office value: {value}")  # Debugging
+        if not value:
+            print("No value provided for in_office.")
+            return None
+
+        # Attempt to find by office_number (integer)
+        try:
+            office_number = int(value)
+            print(f"Looking up by office_number: {office_number}")
+            office = self.model.objects.get(office_number=office_number)
+            print(f"Found office by number: {office}")
+            return office
+        except ValueError:
+            print(f"Value '{value}' is not a number. Trying office name.")
+        except self.model.DoesNotExist:
+            print(f"No office found with number {value}. Trying office name.")
+
+        # Attempt to find by office name (OfficeName's office_name)
+        try:
+            office_name = value.strip()
+            print(f"Looking up by office name: {office_name}")
+            office = self.model.objects.get(office__office_name__iexact=office_name)
+            print(f"Found office by name: {office}")
+            return office
+        except self.model.DoesNotExist:
+            print(f"No office found with name '{office_name}'.")
+            raise ValueError(f"Office '{value}' not found.")
+        except self.model.MultipleObjectsReturned:
+            print(f"Multiple offices with name '{office_name}'. Using first.")
+            return self.model.objects.filter(office__office_name__iexact=office_name).first()
+
+# Update the PostResource class
 # class PostResource(resources.ModelResource):
 #     in_office = fields.Field(
 #         column_name='in_office',
 #         attribute='in_office',
-#         widget=ForeignKeyWidget(Office, field='office__office_name__iexact')  # Case-insensitive match
+#         widget=OfficeForeignKeyWidget(Office)  # Use custom widget
+#     )
+
+#     post_name = fields.Field(
+#         column_name='post_name',
+#         attribute='post_name',
+#         widget=widgets.ChoiceWidget(choices=Post.POST_CHOICES)  # Correct widget
+#     )
+
+#     post_type = fields.Field(
+#         column_name='post_type',
+#         attribute='post_type',
+#         widget=widgets.ChoiceWidget(choices=Post.POST_TYPE_CHOICES)  # Correct widget
 #     )
 
 #     class Meta:
 #         model = Post
-#         exclude = ('id',)
-#         import_id_fields = ()
 #         fields = ('post_name', 'post_type', 'post_number', 'in_office')
+#         import_id_fields = ()
 
 #     def before_import_row(self, row, **kwargs):
-#         office_name = row.get('in_office')
-#         if office_name:
-#             # Clean and find office
-#             office_name_clean = office_name.strip().lower()
-#             office = Office.objects.filter(
-#                 office__office_name__iexact=office_name_clean  # Case-insensitive search
-#             ).first()
-            
-#             if not office:
-#                 # Create minimal Office if allowed (adjust as needed)
-#                 # WARNING: Requires default values for other fields!
-#                 office_name_obj, _ = OfficeName.objects.get_or_create(
-#                     office_name=office_name.strip()
-#                 )
-#                 district = District.objects.first()  # Replace with actual logic
-#                 office = Office.objects.create(
-#                     office=office_name_obj,
-#                     district=district,
-#                     place="Default Place"  # Provide required field
-#                 )
-            
-#             row['in_office'] = office.id
+#         # Normalize post_name and post_type
+#         row['post_name'] = row.get('post_name', '').strip().lower()
+#         row['post_type'] = row.get('post_type', '').strip().lower()
+#         # No need to handle 'in_office' here; widget handles it
 
-#chatgpt
-# class PostResource(resources.ModelResource):
-#     in_office = fields.Field(
-#         column_name='office_number',  # Match office_number from Excel file
-#         attribute='in_office',
-#         widget=ForeignKeyWidget(Office, field='office_number')
-#     )
-
-#     class Meta:
-#         model = Post
-#         exclude = ('id',)
-#         import_id_fields = ()
-#         fields = ('post_name', 'post_type', 'post_number', 'in_office')
-
-#     def before_import_row(self, row, **kwargs):
-#         office_number = row.get('office_number')  # Read office_number from Excel
-
-#         if office_number:
-#             try:
-#                 # Get the Office instance using office_number
-#                 office = Office.objects.get(office_number=office_number)
-#                 row['in_office'] = office.id  # Assign the correct Office ID
-#             except Office.DoesNotExist:
-#                 raise ValueError(f"Office with office_number {office_number} does not exist.")
-
-# deepseek
-# class PostResource(resources.ModelResource):
-#     in_office = fields.Field(
-#         column_name='in_office',  # Match Excel column header
-#         attribute='in_office',
-#         widget=ForeignKeyWidget(Office, field='office_number')  # Use office_number for lookup
-#     )
-
-#     class Meta:
-#         model = Post
-#         fields = ('post_name', 'post_type', 'post_number', 'in_office')
-#         import_id_fields = ()
-#         skip_unchanged = True
-
-#     def before_import_row(self, row, **kwargs):
-#         office_number = row.get('in_office')  # Get value from Excel's "in_office" column
-        
-#         if office_number:
-#             try:
-#                 # Convert to integer (Excel might store numbers as strings)
-#                 office_number = int(office_number)
-#                 # Find Office by office_number
-#                 office = Office.objects.get(office_number=office_number)
-#                 row['in_office'] = office.id
-#             except Office.DoesNotExist:
-#                 raise ValueError(f"Office with number {office_number} does not exist. Import Offices first.")
-#             except ValueError:
-#                 raise ValueError(f"Invalid office number: {office_number}")
-
-# class PostResource(resources.ModelResource):
-#     in_office = fields.Field(
-#         column_name='in_office',  # Match Excel column name
-#         attribute='in_office',
-#         widget=ForeignKeyWidget(Office, field='office_number')  # Directly use office_number for lookup
-#     )
-
-#     class Meta:
-#         model = Post
-#         fields = ('post_name', 'post_type', 'post_number', 'in_office')
-#         import_id_fields = ()
-#         skip_unchanged = True
-
-#     # REMOVE THE before_import_row METHOD
-
-# admin.py
+# In the PostResource class
 class PostResource(resources.ModelResource):
     in_office = fields.Field(
         column_name='in_office',
         attribute='in_office',
-        widget=ForeignKeyWidget(Office, field='office_number')
+        widget=OfficeForeignKeyWidget(Office)  # Use custom widget from previous solution
     )
 
     post_name = fields.Field(
         column_name='post_name',
         attribute='post_name',
-        widget=forms.widgets.Select(choices=Post.POST_CHOICES)  # Force validation
+        widget=widgets.CharWidget()  # Use CharWidget instead of ChoiceWidget
     )
 
     post_type = fields.Field(
         column_name='post_type',
         attribute='post_type',
-        widget=forms.widgets.Select(choices=Post.POST_TYPE_CHOICES)
+        widget=widgets.CharWidget()  # Use CharWidget instead of ChoiceWidget
     )
 
     class Meta:
@@ -350,22 +322,21 @@ class PostResource(resources.ModelResource):
         import_id_fields = ()
 
     def before_import_row(self, row, **kwargs):
-        # Normalize post_name
-        row['post_name'] = row['post_name'].strip().lower()
+        # Normalize and validate post_name
+        post_name = row.get('post_name', '').strip().lower()
+        valid_post_names = [choice[0].lower() for choice in Post.POST_CHOICES]
+        if post_name not in valid_post_names:
+            raise ValueError(f"Invalid post_name: '{post_name}'. Valid options: {valid_post_names}")
+        row['post_name'] = post_name
         
-        # Normalize post_type
-        row['post_type'] = row['post_type'].strip().lower()
+        # Normalize and validate post_type
+        post_type = row.get('post_type', '').strip().lower()
+        valid_post_types = [choice[0].lower() for choice in Post.POST_TYPE_CHOICES]
+        if post_type not in valid_post_types:
+            raise ValueError(f"Invalid post_type: '{post_type}'. Valid options: {valid_post_types}")
+        row['post_type'] = post_type
 
-        # Handle office_number
-        office_number = row.get('in_office')
-        if office_number:
-            try:
-                office = Office.objects.get(office_number=int(office_number))
-                row['in_office'] = office.id
-            except Office.DoesNotExist:
-                raise ValueError(f"Office {office_number} not found")
-            except ValueError:
-                raise ValueError(f"Invalid office number: {office_number}")
+        print(f"Processed row: {row}")  # Debugging output
 
 # Register resources with updated configurations
 @admin.register(State)
@@ -478,16 +449,12 @@ class OfficeAdmin(ImportExportModelAdmin):
         return obj.office.department.dept_name if obj.office and obj.office.department else None
     get_department.short_description = 'Department'
 
-# Remaining models can stay with default ImportExportModelAdmin
-# admin.site.register(Department, ImportExportModelAdmin)
-# admin.site.register(SubDepartment, ImportExportModelAdmin)
 @admin.register(SubDepartment)
 class SubDepartmentAdmin(ImportExportModelAdmin):
     list_display = ('sub_dept_name', 'department')
     list_filter = ('department',)
     search_fields = ('sub_dept_name', 'department__dept_name')
 
-# admin.site.register(Office, ImportExportModelAdmin)
 @admin.register(SubOffice)
 class SubOfficeAdmin(ImportExportModelAdmin):
     list_display = ('name', 'upper_office', 'tehsil')

@@ -114,7 +114,7 @@ class Post(models.Model):
     in_office = models.ForeignKey(Office, on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
-        # unique_together = ('post_number', 'in_office')  # Unique number per office
+        unique_together = ('post_number', 'in_office')  # Unique number per office
         unique_together = ()  # Unique number per office
         ordering = ['in_office', 'post_number']
 
