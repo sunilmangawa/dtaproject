@@ -68,14 +68,26 @@ class SubDepartment(models.Model):
     def __str__(self):
         return self.sub_dept_name
 
+class OfficeName(models.Model):
+    office_name = models.CharField(max_length=100)  # Removed unique=True
+    department = models.ForeignKey(Department, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.office_name} ({self.department})"  # Optional: Improved representation
+
+    class Meta:
+        unique_together = ('office_name', 'department')  # Enforce combined uniqueness
+
 class Office(models.Model):
-    office_name = models.CharField(max_length=100, unique=True)
-    office_id = models.IntegerField(unique=True, blank=True, default=None, null=True)
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
+    office = models.ForeignKey(OfficeName, on_delete=models.CASCADE)
+    office_number = models.IntegerField(unique=True, blank=True, default=None, null=True)
+    district = models.ForeignKey(District, on_delete=models.CASCADE)
+    tehsil = models.ForeignKey(Tehsil, on_delete=models.CASCADE, blank=True, null=True)
     place = models.CharField(max_length=100, unique=False)
 
     def __str__(self):
-        return self.office_name
+        # return self.office + " " + str(self.district)
+        return f"{self.office.office_name} {self.district}"
 
 class SubOffice(models.Model):
     name = models.CharField(max_length=100)
@@ -98,26 +110,40 @@ class Post(models.Model):
     ]
     post_name = models.CharField(max_length=20, choices=(POST_CHOICES))
     post_type = models.CharField(max_length=20, choices=POST_TYPE_CHOICES, default=None)
+    post_number = models.PositiveIntegerField()
     in_office = models.ForeignKey(Office, on_delete=models.CASCADE, null=True, blank=True)
 
+    class Meta:
+        # unique_together = ('post_number', 'in_office')  # Unique number per office
+        unique_together = ()  # Unique number per office
+        ordering = ['in_office', 'post_number']
+
     def __str__(self):
-        return self.post_name
+        return f"{self.get_post_name_display()} ({self.post_number}) - {self.in_office}"
+    
+    def clean(self):
+        if not self.in_office:
+            raise ValidationError("Office must be provided for the post.")
+        if Office.objects.filter(office__office_name=self.in_office.office.office_name).count() > 1:
+            raise ValidationError("Multiple offices with this name exist. Provide district/department in CSV.")    
+    # def __str__(self):
+    #     return self.post_name
 
 class Employee(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
     employeeID = models.CharField(max_length=15)
-    link_number = models.IntegerField(max_length=7)
+    link_number = models.IntegerField()
     dob = models.DateField()
     mobile = models.CharField(max_length=15)
     email = models.EmailField(unique=True)
     home_district = models.ForeignKey(District, on_delete=models.SET_NULL, null=True)
-    join_office = models.ForeignKey(Office, on_delete=models.CASCADE, related_name='joined_office')
-    join_post = models.ForeignKey(Post, on_delete=models.CASCADE)
-    join_date = models.DateField()
-    retire_date = models.DateField()
-    apo_posting = models.CharField(max_length=255, blank=True, null=True)
+    education = models.CharField(max_length=50,null=True)
     current_office = models.ForeignKey(Office, on_delete=models.SET_NULL, null=True, related_name='current_office')
+    # join_office = models.ForeignKey(Office, on_delete=models.CASCADE, related_name='joined_office')
+    current_post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    currentOffice_join_date = models.DateField()
+    # apo_posting = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.name

@@ -2,9 +2,9 @@
 *.env
 
 # Database
-db.sqlite3
-*.sqlite3
-*.db
+# db.sqlite3
+# *.sqlite3
+# *.db
 
 # Static files (usually collected with `python manage.py collectstatic`)
 staticfiles/
